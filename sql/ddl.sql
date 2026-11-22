@@ -38,9 +38,12 @@ CREATE TABLE IF NOT EXISTS workspace.silver.offers (
   offer_id STRING NOT NULL,
   offer_category STRING,
   payout_type STRING,
-  payout_eur DECIMAL(10, 2),
-  CONSTRAINT offers_payout_non_negative CHECK (payout_eur >= 0)
+  payout_eur DECIMAL(10, 2)
 ) CLUSTER BY (offer_id);
+
+-- CREATE TABLE rejects CHECK constraints on this endpoint, so add the rule afterwards.
+-- Re-running fails here once the constraint exists; the setup script treats that as an error.
+ALTER TABLE workspace.silver.offers ADD CONSTRAINT offers_payout_non_negative CHECK (payout_eur >= 0);
 
 CREATE TABLE IF NOT EXISTS workspace.silver.fact_events (
   event_id STRING NOT NULL,
