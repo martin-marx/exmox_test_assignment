@@ -3,7 +3,7 @@ from datetime import datetime
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 
-from silver.utils import (
+from silver.tables.utils import (
     from_ingest_watermark,
     merge_column_mappings,
     normalize_country,

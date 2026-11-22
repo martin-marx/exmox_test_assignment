@@ -1,7 +1,7 @@
 import pytest
 from pyspark.sql.types import StringType
 
-from bronze.utils import ingest_source, parse_source_columns, source_path
+from bronze.sources.utils import ingest_source, parse_source_columns, source_path
 
 
 def test_source_path_matches_the_static_exercise_file():

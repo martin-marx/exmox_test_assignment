@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 
-from gold.utils import aggregate_events, aggregate_installs, combine_daily_kpis
+from gold.tables.utils import aggregate_events, aggregate_installs, combine_daily_kpis
 
 
 def test_aggregate_installs_filters_the_reporting_window_and_counts_distinct_users(spark):
