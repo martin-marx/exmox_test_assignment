@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS workspace.silver.offers (
 ) CLUSTER BY (offer_id);
 
 -- CREATE TABLE rejects CHECK constraints on this endpoint, so add the rule afterwards.
--- Re-running fails here once the constraint exists; the setup script treats that as an error.
+-- Drop-then-add keeps this file re-runnable: the constraint is recreated on every run.
+ALTER TABLE workspace.silver.offers DROP CONSTRAINT IF EXISTS offers_payout_non_negative;
 ALTER TABLE workspace.silver.offers ADD CONSTRAINT offers_payout_non_negative CHECK (payout_eur >= 0);
 
 CREATE TABLE IF NOT EXISTS workspace.silver.fact_events (
