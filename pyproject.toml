@@ -1,0 +1,33 @@
+[project]
+name = "rewarded-offer-kpis"
+version = "0.1.0"
+description = "Databricks medallion pipeline for rewarded-offer KPIs"
+requires-python = ">=3.11,<3.14"
+
+[dependency-groups]
+dev = [
+  "pyspark>=3.5,<4",
+  "pytest>=8.3,<9",
+  "ruff>=0.8,<1",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+builtins = ["dbutils", "display", "spark"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/bronze/**/*.py" = ["E402", "E501"]
+"src/silver/**/*.py" = ["E402", "E501"]
+"src/gold/**/*.py" = ["E402", "E501"]
+"src/bronze/sources/*.py" = ["F821"]
+"src/silver/tables/*.py" = ["F821"]
+"src/gold/tables/*.py" = ["F821"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

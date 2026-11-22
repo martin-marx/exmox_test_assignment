@@ -1,0 +1,111 @@
+resources:
+  jobs:
+    rewarded_offer_kpis:
+      name: rewarded-offer-kpis
+      parameters:
+        - name: target_date
+          default: "{{(job.start_time - 1.day).iso_date}}"
+        - name: lookback_days
+          default: "7"
+      schedule:
+        quartz_cron_expression: "0 15 0 * * ?"
+        timezone_id: UTC
+        pause_status: PAUSED
+      tasks:
+        - task_key: bronze_installs
+          notebook_task:
+            notebook_path: ../src/bronze/sources/ingest.py
+            base_parameters:
+              catalog: workspace
+              source_name: installs
+              target_table: bronze.installs
+              source_columns: '["user_id", "install_ts", "country", "platform", "media_source", "device_model", "campaign_id"]'
+        - task_key: bronze_events
+          notebook_task:
+            notebook_path: ../src/bronze/sources/ingest.py
+            base_parameters:
+              catalog: workspace
+              source_name: events
+              target_table: bronze.events
+              source_columns: '["user_id", "event_ts", "event_name", "offer_id", "event_id", "ingest_ts"]'
+        - task_key: bronze_offers
+          notebook_task:
+            notebook_path: ../src/bronze/sources/ingest.py
+            base_parameters:
+              catalog: workspace
+              source_name: offers
+              target_table: bronze.offers
+              source_columns: '["offer_id", "offer_category", "payout_type", "payout_eur"]'
+        - task_key: bronze_user_profile
+          notebook_task:
+            notebook_path: ../src/bronze/sources/ingest.py
+            base_parameters:
+              catalog: workspace
+              source_name: user_profile
+              target_table: bronze.user_profile
+              source_columns: '["user_id", "events_lifetime", "last_seen_ts", "revenue_30d_eur", "is_payer"]'
+
+        - task_key: dqc_bronze_installs
+          depends_on: [{task_key: bronze_installs}]
+          notebook_task:
+            notebook_path: ../src/bronze/dqc/installs.py
+            base_parameters: {catalog: workspace}
+        - task_key: silver_installs
+          depends_on: [{task_key: dqc_bronze_installs}]
+          notebook_task:
+            notebook_path: ../src/silver/tables/installs.py
+            base_parameters: {catalog: workspace}
+
+        - task_key: dqc_bronze_events
+          depends_on: [{task_key: bronze_events}]
+          notebook_task:
+            notebook_path: ../src/bronze/dqc/events.py
+            base_parameters:
+              catalog: workspace
+              lookback_days: "{{job.parameters.lookback_days}}"
+        - task_key: silver_events
+          depends_on: [{task_key: dqc_bronze_events}]
+          notebook_task:
+            notebook_path: ../src/silver/tables/events.py
+            base_parameters: {catalog: workspace}
+
+        - task_key: dqc_bronze_offers
+          depends_on: [{task_key: bronze_offers}]
+          notebook_task:
+            notebook_path: ../src/bronze/dqc/offers.py
+            base_parameters: {catalog: workspace}
+        - task_key: silver_offers
+          depends_on: [{task_key: dqc_bronze_offers}]
+          notebook_task:
+            notebook_path: ../src/silver/tables/offers.py
+            base_parameters: {catalog: workspace}
+
+        - task_key: dqc_bronze_user_profile
+          depends_on: [{task_key: bronze_user_profile}]
+          notebook_task:
+            notebook_path: ../src/bronze/dqc/user_profile.py
+            base_parameters: {catalog: workspace}
+        - task_key: silver_user_profile
+          depends_on: [{task_key: dqc_bronze_user_profile}]
+          notebook_task:
+            notebook_path: ../src/silver/tables/user_profile.py
+            base_parameters: {catalog: workspace}
+
+        - task_key: gold_daily_kpis
+          depends_on:
+            - task_key: silver_installs
+            - task_key: silver_events
+            - task_key: silver_offers
+          notebook_task:
+            notebook_path: ../src/gold/tables/daily_kpis.py
+            base_parameters:
+              catalog: workspace
+              target_date: "{{job.parameters.target_date}}"
+              lookback_days: "{{job.parameters.lookback_days}}"
+        - task_key: dqc_gold_daily_kpis
+          depends_on:
+            - task_key: gold_daily_kpis
+            - task_key: silver_user_profile
+          notebook_task:
+            notebook_path: ../src/gold/dqc/daily_kpis.py
+            base_parameters: {catalog: workspace}

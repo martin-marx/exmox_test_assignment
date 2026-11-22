@@ -1,0 +1,7 @@
+-- Reference production RBAC. Replace principals with workspace groups.
+-- GRANT USE CATALOG ON CATALOG prod TO `data-engineering`;
+-- GRANT USE SCHEMA, SELECT, MODIFY ON SCHEMA prod.bronze TO `pipeline-service-principal`;
+-- GRANT USE SCHEMA, SELECT, MODIFY ON SCHEMA prod.silver TO `pipeline-service-principal`;
+-- GRANT USE SCHEMA, SELECT, MODIFY ON SCHEMA prod.gold TO `pipeline-service-principal`;
+-- GRANT USE SCHEMA, SELECT ON SCHEMA prod.gold TO `analytics`;
+-- Do not grant analyst access to Bronze because it contains raw operational data.
