@@ -16,7 +16,7 @@ resources:
           notebook_task:
             notebook_path: ../src/bronze/sources/ingest.py
             base_parameters:
-              catalog: test_assignment_marx
+              catalog: "${var.catalog}"
               source_name: installs
               target_table: bronze.installs
               source_columns: '["user_id", "install_ts", "country", "platform", "media_source", "device_model", "campaign_id"]'
@@ -24,7 +24,7 @@ resources:
           notebook_task:
             notebook_path: ../src/bronze/sources/ingest.py
             base_parameters:
-              catalog: test_assignment_marx
+              catalog: "${var.catalog}"
               source_name: events
               target_table: bronze.events
               source_columns: '["user_id", "event_ts", "event_name", "offer_id", "event_id", "ingest_ts"]'
@@ -32,7 +32,7 @@ resources:
           notebook_task:
             notebook_path: ../src/bronze/sources/ingest.py
             base_parameters:
-              catalog: test_assignment_marx
+              catalog: "${var.catalog}"
               source_name: offers
               target_table: bronze.offers
               source_columns: '["offer_id", "offer_category", "payout_type", "payout_eur"]'
@@ -40,7 +40,7 @@ resources:
           notebook_task:
             notebook_path: ../src/bronze/sources/ingest.py
             base_parameters:
-              catalog: test_assignment_marx
+              catalog: "${var.catalog}"
               source_name: user_profile
               target_table: bronze.user_profile
               source_columns: '["user_id", "events_lifetime", "last_seen_ts", "revenue_30d_eur", "is_payer"]'
@@ -49,47 +49,47 @@ resources:
           depends_on: [{task_key: bronze_installs}]
           notebook_task:
             notebook_path: ../src/bronze/dqc/installs.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
         - task_key: silver_installs
           depends_on: [{task_key: dqc_bronze_installs}]
           notebook_task:
             notebook_path: ../src/silver/tables/installs.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
 
         - task_key: dqc_bronze_events
           depends_on: [{task_key: bronze_events}]
           notebook_task:
             notebook_path: ../src/bronze/dqc/events.py
             base_parameters:
-              catalog: test_assignment_marx
+              catalog: "${var.catalog}"
               lookback_days: "{{job.parameters.lookback_days}}"
         - task_key: silver_events
           depends_on: [{task_key: dqc_bronze_events}]
           notebook_task:
             notebook_path: ../src/silver/tables/events.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
 
         - task_key: dqc_bronze_offers
           depends_on: [{task_key: bronze_offers}]
           notebook_task:
             notebook_path: ../src/bronze/dqc/offers.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
         - task_key: silver_offers
           depends_on: [{task_key: dqc_bronze_offers}]
           notebook_task:
             notebook_path: ../src/silver/tables/offers.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
 
         - task_key: dqc_bronze_user_profile
           depends_on: [{task_key: bronze_user_profile}]
           notebook_task:
             notebook_path: ../src/bronze/dqc/user_profile.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
         - task_key: silver_user_profile
           depends_on: [{task_key: dqc_bronze_user_profile}]
           notebook_task:
             notebook_path: ../src/silver/tables/user_profile.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}
 
         - task_key: gold_daily_kpis
           depends_on:
@@ -99,7 +99,7 @@ resources:
           notebook_task:
             notebook_path: ../src/gold/tables/daily_kpis.py
             base_parameters:
-              catalog: test_assignment_marx
+              catalog: "${var.catalog}"
               target_date: "{{job.parameters.target_date}}"
               lookback_days: "{{job.parameters.lookback_days}}"
         - task_key: dqc_gold_daily_kpis
@@ -108,4 +108,4 @@ resources:
             - task_key: silver_user_profile
           notebook_task:
             notebook_path: ../src/gold/dqc/daily_kpis.py
-            base_parameters: {catalog: test_assignment_marx}
+            base_parameters: {catalog: "${var.catalog}"}

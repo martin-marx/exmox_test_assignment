@@ -1,6 +1,11 @@
 bundle:
   name: rewarded-offer-kpis
 
+variables:
+  catalog:
+    description: Unity Catalog catalog holding the bronze, silver, gold, and data schemas.
+    default: test_assignment_marx
+
 include:
   - resources/*.yml
 
