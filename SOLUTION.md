@@ -2,7 +2,7 @@
 
 ## Environment and Runbook
 
-The code targets Databricks Free Edition serverless compute with the `workspace` catalog. It has not been run in a personal Databricks workspace; the reference results below were independently recomputed from the supplied CSVs. A production workspace would use separate environment catalogs and service-principal grants.
+The code targets Databricks Free Edition serverless compute with the `test_assignment_marx` catalog. It has not been run in a personal Databricks workspace; the reference results below were independently recomputed from the supplied CSVs. A production workspace would use separate environment catalogs and service-principal grants.
 
 1. Authenticate the Databricks CLI and set `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, and `DATABRICKS_WAREHOUSE_ID`.
 2. Ensure the supplied `data/` CSVs are present, then run `scripts/setup.sh`. It applies `sql/ddl.sql` and uploads each static source file to the Unity Catalog Volume.

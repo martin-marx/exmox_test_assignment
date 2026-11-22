@@ -35,7 +35,7 @@ This is a Databricks Asset Bundle with one Workflow (`resources/workflow.yml`) i
 
 **Task graph.** `resources/workflow.yml` runs per source, with a chain for each: `bronze_<src>` → `dqc_bronze_<src>` → `silver_<src>`. Gold waits on `silver_installs`, `silver_events`, and `silver_offers`. `dqc_gold_daily_kpis` also waits on `silver_user_profile`, so the profile branch is not on the Gold data path. The Workflow owns the source column contracts (`source_columns` in each Bronze task). `sql/ddl.sql` owns the table schemas. Changing a column means updating both.
 
-**Bronze** (`bronze/sources/ingest.py`): overwrites each `bronze.<entity>` table from `/Volumes/<catalog>/default/raw_data/<entity>.csv`, casting every column to string. Bronze keeps every raw row for audit.
+**Bronze** (`bronze/sources/ingest.py`): overwrites each `bronze.<entity>` table from `/Volumes/<catalog>/data/raw_data/<entity>.csv`, casting every column to string. Bronze keeps every raw row for audit.
 
 **Bronze DQC** (`bronze/dqc/*.py`) has two kinds of check, and the difference matters:
 - Non-blocking: logs `DATA_QUALITY_ALERT` for malformed keys, bad timestamps, unknown event names, and raw duplicates.

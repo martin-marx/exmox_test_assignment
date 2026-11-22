@@ -1,29 +1,31 @@
+CREATE CATALOG IF NOT EXISTS test_assignment_marx;
 -- Run against a Unity Catalog-enabled SQL warehouse before the Workflow.
-CREATE SCHEMA IF NOT EXISTS workspace.bronze;
-CREATE SCHEMA IF NOT EXISTS workspace.silver;
-CREATE SCHEMA IF NOT EXISTS workspace.gold;
-CREATE VOLUME IF NOT EXISTS workspace.default.raw_data;
+CREATE SCHEMA IF NOT EXISTS test_assignment_marx.bronze;
+CREATE SCHEMA IF NOT EXISTS test_assignment_marx.silver;
+CREATE SCHEMA IF NOT EXISTS test_assignment_marx.gold;
+CREATE SCHEMA IF NOT EXISTS test_assignment_marx.data;
+CREATE VOLUME IF NOT EXISTS test_assignment_marx.data.raw_data;
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.installs (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.bronze.installs (
   user_id STRING, install_ts STRING, country STRING, platform STRING,
   media_source STRING, device_model STRING, campaign_id STRING
 ) COMMENT 'Raw install snapshot; all source fields are strings.';
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.events (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.bronze.events (
   user_id STRING, event_ts STRING, event_name STRING, offer_id STRING,
   event_id STRING, ingest_ts STRING
 ) COMMENT 'Raw event snapshot; source retries are intentionally retained.';
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.offers (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.bronze.offers (
   offer_id STRING, offer_category STRING, payout_type STRING, payout_eur STRING
 ) COMMENT 'Raw offer snapshot.';
 
-CREATE TABLE IF NOT EXISTS workspace.bronze.user_profile (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.bronze.user_profile (
   user_id STRING, events_lifetime STRING, last_seen_ts STRING, revenue_30d_eur STRING,
   is_payer STRING
 ) COMMENT 'Raw backend profile snapshot for reconciliation.';
 
-CREATE TABLE IF NOT EXISTS workspace.silver.installs (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.silver.installs (
   user_id STRING NOT NULL,
   install_ts TIMESTAMP,
   install_date DATE,
@@ -34,7 +36,7 @@ CREATE TABLE IF NOT EXISTS workspace.silver.installs (
   campaign_id STRING
 ) CLUSTER BY (install_date, user_id);
 
-CREATE TABLE IF NOT EXISTS workspace.silver.offers (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.silver.offers (
   offer_id STRING NOT NULL,
   offer_category STRING,
   payout_type STRING,
@@ -43,10 +45,10 @@ CREATE TABLE IF NOT EXISTS workspace.silver.offers (
 
 -- CREATE TABLE rejects CHECK constraints on this endpoint, so add the rule afterwards.
 -- Drop-then-add keeps this file re-runnable: the constraint is recreated on every run.
-ALTER TABLE workspace.silver.offers DROP CONSTRAINT IF EXISTS offers_payout_non_negative;
-ALTER TABLE workspace.silver.offers ADD CONSTRAINT offers_payout_non_negative CHECK (payout_eur >= 0);
+ALTER TABLE test_assignment_marx.silver.offers DROP CONSTRAINT IF EXISTS offers_payout_non_negative;
+ALTER TABLE test_assignment_marx.silver.offers ADD CONSTRAINT offers_payout_non_negative CHECK (payout_eur >= 0);
 
-CREATE TABLE IF NOT EXISTS workspace.silver.fact_events (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.silver.fact_events (
   event_id STRING NOT NULL,
   user_id STRING,
   event_ts TIMESTAMP,
@@ -56,7 +58,7 @@ CREATE TABLE IF NOT EXISTS workspace.silver.fact_events (
   offer_id STRING
 ) CLUSTER BY (event_date, user_id);
 
-CREATE TABLE IF NOT EXISTS workspace.silver.user_profile (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.silver.user_profile (
   user_id STRING NOT NULL,
   events_lifetime BIGINT,
   last_seen_ts TIMESTAMP,
@@ -67,7 +69,7 @@ CREATE TABLE IF NOT EXISTS workspace.silver.user_profile (
   is_current BOOLEAN NOT NULL
 ) CLUSTER BY (user_id);
 
-CREATE TABLE IF NOT EXISTS workspace.gold.daily_kpis (
+CREATE TABLE IF NOT EXISTS test_assignment_marx.gold.daily_kpis (
   report_date DATE NOT NULL,
   country STRING,
   platform STRING,

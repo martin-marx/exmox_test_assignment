@@ -5,7 +5,10 @@ from bronze.utils import ingest_source, parse_source_columns, source_path
 
 
 def test_source_path_matches_the_static_exercise_file():
-    assert source_path("workspace", "events") == "/Volumes/workspace/default/raw_data/events.csv"
+    assert (
+        source_path("test_assignment_marx", "events")
+        == "/Volumes/test_assignment_marx/data/raw_data/events.csv"
+    )
 
 
 def test_parse_source_columns_requires_a_json_array_of_strings():

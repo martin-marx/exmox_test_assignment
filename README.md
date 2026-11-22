@@ -6,9 +6,12 @@ Databricks batch pipeline for daily rewarded-offer KPIs by reporting date, count
 
 - Python 3.11+
 - [uv](https://docs.astral.sh/uv/)
-- Databricks CLI authenticated to a Unity Catalog-enabled workspace
-- A SQL warehouse ID for the one-time schema setup
-- The supplied `data/` directory with the four source CSVs; they are intentionally not committed to Git
+- Databricks CLI (tested with v1.27) authenticated to a Unity Catalog-enabled workspace
+- `jq`, used by `scripts/setup.sh`
+- Permission to create a catalog. `setup.sh` runs `CREATE CATALOG IF NOT EXISTS test_assignment_marx`; a workspace admin can create it beforehand instead.
+- A running SQL warehouse ID for the one-time schema setup
+- JDK 17 for the local Spark tests only (`uv run pytest`). Spark 3.5 supports Java 8, 11, and 17.
+- The four source CSVs (`installs`, `events`, `offers`, `user_profile`) in `data/`. They are committed to the repository, so a clone already has them.
 
 ## Local Checks
 
@@ -21,10 +24,11 @@ uv run pytest
 
 ## First Workspace Run
 
-Authenticate the Databricks CLI, then set the SQL warehouse used for the DDL:
+Authenticate the Databricks CLI, then find and export the SQL warehouse used for the DDL. Run these from the repository root, because the scripts use relative paths:
 
 ```bash
 databricks auth login --host https://<workspace-host>
+databricks warehouses list
 export DATABRICKS_WAREHOUSE_ID=<warehouse-id>
 ```
 
@@ -33,6 +37,8 @@ Create the Unity Catalog objects and upload the supplied static source files:
 ```bash
 ./scripts/setup.sh
 ```
+
+This creates the catalog `test_assignment_marx`, the schemas `bronze`, `silver`, `gold`, and `data`, the volume `data.raw_data`, and all tables, then uploads the CSVs to `/Volumes/test_assignment_marx/data/raw_data/`. It is re-runnable: the offers constraint is dropped and re-added on each run. `CREATE TABLE IF NOT EXISTS` never alters an existing table, so after a schema change you must drop the affected schemas or tables manually before re-running.
 
 Deploy and run the Workflow:
 

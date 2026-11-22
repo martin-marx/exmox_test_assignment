@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Requires the Databricks CLI to be authenticated and DATABRICKS_WAREHOUSE_ID.
-volume_path="/Volumes/workspace/default/raw_data"
+volume_path="/Volumes/test_assignment_marx/data/raw_data"
 
 # The statements API runs one statement per call. Split sql/ddl.sql on ";" at the end of a line;
 # semicolons inside COMMENT strings are followed by a space, so they are not split points.
