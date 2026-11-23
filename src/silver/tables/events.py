@@ -50,7 +50,10 @@ deduplicated_events = (
 (
     DeltaTable.forName(spark, f"{catalog}.silver.fact_events")
     .alias("target")
-    .merge(deduplicated_events.alias("source"), "target.event_id = source.event_id")
+    .merge(
+        deduplicated_events.alias("source"),
+        "target.event_id = source.event_id AND target.event_date = source.event_date",
+    )
     .whenNotMatchedInsert(
         values={
             "event_id": "source.event_id",

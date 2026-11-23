@@ -43,7 +43,7 @@ This is a Databricks Asset Bundle with one Workflow (`resources/workflow.yml`) i
 
 **Silver** (`silver/tables/*.py`) is where business rules live. Each notebook writes its own table, with no shared merge helper:
 - `installs` and `offers` are immutable. Only keys not yet in Silver are appended (`left_anti` join).
-- `fact_events` is incremental. It starts from `MAX(ingest_ts)` in Silver, which reprocesses that boundary, then keeps the earliest `ingest_ts` per `event_id` and inserts only unseen IDs.
+- `fact_events` is incremental. It starts from `MAX(ingest_ts)` in Silver, which reprocesses that boundary, then keeps the earliest `ingest_ts` per `event_id` and merges on `event_id` plus `event_date` (insert-only, so unseen events are inserted).
 - `user_profile` is SCD2. A single Delta `MERGE` both expires the current version of changed users and inserts their new version. Rows that fail key or timestamp parsing are dropped from Silver but remain in Bronze.
 - A Delta `CHECK (payout_eur >= 0)` on `silver.offers` is the last line of defence against negative payouts.
 
