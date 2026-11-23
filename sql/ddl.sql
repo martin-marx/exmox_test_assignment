@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS test_assignment_marx.silver.installs (
   media_source STRING,
   device_model STRING,
   campaign_id STRING
-) CLUSTER BY (install_date, user_id);
+) CLUSTER BY (install_date);
 
 CREATE TABLE IF NOT EXISTS test_assignment_marx.silver.offers (
   offer_id STRING NOT NULL,

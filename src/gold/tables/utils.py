@@ -3,19 +3,15 @@
 from pyspark.sql import functions as F
 
 
-def aggregate_installs(installs, start_date, end_date):
-    start = F.lit(start_date.isoformat()).cast("date")
-    end = F.lit(end_date.isoformat()).cast("date")
+def aggregate_installs(installs, start, end):
     return (
         installs.where(F.col("install_date").between(start, end))
         .groupBy(F.col("install_date").alias("report_date"), "country", "platform")
-        .agg(F.countDistinct("user_id").alias("installs"))
+        .agg(F.count("user_id").alias("installs"))
     )
 
 
-def aggregate_events(events, installs, offers, start_date, end_date):
-    start = F.lit(start_date.isoformat()).cast("date")
-    end = F.lit(end_date.isoformat()).cast("date")
+def aggregate_events(events, installs, offers, start, end):
     events_with_dimensions = (
         events.where(F.col("event_date").between(start, end))
         .alias("events")

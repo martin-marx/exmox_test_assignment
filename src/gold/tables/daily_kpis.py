@@ -11,6 +11,8 @@ sys.path.insert(
 )
 from datetime import date, timedelta
 
+from pyspark.sql import functions as F
+
 from gold.tables.utils import aggregate_events, aggregate_installs, combine_daily_kpis
 
 dbutils.widgets.text("catalog", "test_assignment_marx")
@@ -27,13 +29,15 @@ if lookback_days < 0:
 
 end_date = date.fromisoformat(target_date_parameter)
 start_date = end_date - timedelta(days=lookback_days)
+start = F.lit(start_date.isoformat()).cast("date")
+end = F.lit(end_date.isoformat()).cast("date")
 gold_table = f"{catalog}.gold.daily_kpis"
 
 installs = spark.table(f"{catalog}.silver.installs")
 events = spark.table(f"{catalog}.silver.fact_events")
 offers = spark.table(f"{catalog}.silver.offers")
-installs_by_day = aggregate_installs(installs, start_date, end_date)
-events_by_day = aggregate_events(events, installs, offers, start_date, end_date)
+installs_by_day = aggregate_installs(installs, start, end)
+events_by_day = aggregate_events(events, installs, offers, start, end)
 daily_kpis = combine_daily_kpis(installs_by_day, events_by_day)
 
 replace_where = f"report_date >= DATE '{start_date.isoformat()}' AND report_date <= DATE '{end_date.isoformat()}'"
