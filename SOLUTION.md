@@ -105,9 +105,8 @@ In the current setup, you don't—skipped rows vanish silently until downstream 
 
 * **Workflow & tool split:** Used Opencode (Terra 5.6) to scaffold the initial project and DABs structure, Claude Haiku 5.5 for targeted code and unit-test refinements, and Gemini to stress-test edge cases and tighten the write-up.
 * **Context across sessions:** Instead of relying on long chat histories, I carried context between tools through concrete artifacts—the SQL DDL, pure PySpark transformation modules, and incremental drafts of `SOLUTION.md`.
-* **What I kept:** Boilerplate scaffolding, parameterized pytest cases, and structured trade-off framing for non-additive metrics and ingestion failure modes.
-* **What I rejected:** Repeatedly stripped out over-engineered suggestions and hallucinations—including invalid `PARTITION BY` + `CLUSTER BY` combinations, unimplemented Change Data Feed (CDF) tracking, enterprise Unity Catalog RBAC policies not built in this prototype, and volume-drop alerts that would not catch timestamp skew.
-
+* **What I kept:** Boilerplate scaffolding, parameterized pytest cases, and structured trade-off framing for non-additive metrics and ingestion failure modes, refining documentation
+* **What I rejected:** Repeatedly stripped out over-engineered suggestions and hallucinations invalid suggestion to use `PARTITION BY` + `CLUSTER BY` for a DDL
 ### Result
 ![img.png](img.png)
 ![img_1.png](img_1.png)
