@@ -23,7 +23,7 @@ def test_aggregate_installs_filters_the_reporting_window_and_counts_distinct_use
     assert actual.report_date == date(2026, 5, 10)
 
 
-def test_aggregate_events_calculates_metrics_cost_and_unpriced_payouts(spark):
+def test_aggregate_events_calculates_metrics_and_cost_from_priced_offers(spark):
     installs = spark.createDataFrame(
         [("u-1", "DE", "android"), ("u-2", "DE", "android")],
         "user_id string, country string, platform string",
@@ -49,7 +49,6 @@ def test_aggregate_events_calculates_metrics_cost_and_unpriced_payouts(spark):
     assert actual.dau_reward_paid == 1
     assert actual.reward_payouts == 2
     assert actual.reward_cost_eur == Decimal("1.50")
-    assert actual.unpriced_reward_payouts == 1
 
 
 def test_combine_daily_kpis_preserves_install_only_rows_and_coalesces_metrics(spark):
@@ -62,8 +61,7 @@ def test_combine_daily_kpis_preserves_install_only_rows_and_coalesces_metrics(sp
         (
             "report_date date, country string, platform string, dau_app_open long, "
             "dau_offer_view long, dau_offer_start long, dau_goal_reached long, "
-            "dau_reward_paid long, reward_payouts long, reward_cost_eur decimal(18,2), "
-            "unpriced_reward_payouts long"
+            "dau_reward_paid long, reward_payouts long, reward_cost_eur decimal(18,2)"
         ),
     )
 

@@ -56,12 +56,6 @@ def aggregate_events(events, installs, offers, start_date, end_date):
         F.sum(F.when(F.col("events.event_name") == "reward_paid", F.col("offers.payout_eur")))
         .cast("decimal(18,2)")
         .alias("reward_cost_eur"),
-        F.count(
-            F.when(
-                (F.col("events.event_name") == "reward_paid") & F.col("offers.offer_id").isNull(),
-                F.lit(1),
-            )
-        ).alias("unpriced_reward_payouts"),
     )
 
 
@@ -90,9 +84,6 @@ def combine_daily_kpis(installs_by_day, events_by_day):
             F.coalesce(F.col("events.reward_payouts"), F.lit(0)).alias("reward_payouts"),
             F.coalesce(F.col("events.reward_cost_eur"), F.lit(0).cast("decimal(18,2)")).alias(
                 "reward_cost_eur"
-            ),
-            F.coalesce(F.col("events.unpriced_reward_payouts"), F.lit(0)).alias(
-                "unpriced_reward_payouts"
             ),
         )
     )

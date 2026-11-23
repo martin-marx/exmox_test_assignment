@@ -11,7 +11,7 @@ uv sync --all-groups
 uv run ruff format --check .    # `uv run ruff format .` to fix
 uv run ruff check .
 uv run pytest
-uv run pytest tests/gold/test_gold_utils.py::test_aggregate_events_calculates_metrics_cost_and_unpriced_payouts
+uv run pytest tests/gold/test_gold_utils.py::test_aggregate_events_calculates_metrics_and_cost_from_priced_offers
 ```
 
 The Spark tests need a Java runtime on the machine (PySpark starts a JVM). On this machine `java` is not installed, so 11 of 14 tests error at fixture setup with `PySparkRuntimeError`; only the three non-Spark tests pass. Install a JDK before expecting the suite to be green.
