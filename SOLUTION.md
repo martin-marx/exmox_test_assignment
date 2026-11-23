@@ -97,8 +97,8 @@ In the current setup, you don't—skipped rows vanish silently until downstream 
 ### Your platform choices
 
 * **Gold `replaceWhere`:** In Gold, full-day atomic `replaceWhere` keeps non-additive `COUNT(DISTINCT user_id)` exact and SQL stateless (since a mixed `(report_date, country, platform)` row cannot be updated by simply merging additive deltas like `installs` or `reward_payouts`), trading higher compute against file-routed partial rewrites or approximate HyperLogLog sketches.
-* **Liquid Clustering:** Chose `CLUSTER BY (report_date, country, platform)` in Gold (`CLUSTER BY` on date/lookup keys in Silver) to avoid tiny files from 3-column partitioning while keeping multi-column data skipping—trading weaker single-date rewrite isolation than `PARTITIONED BY (report_date)` + `ZORDER`. Verify in **Spark UI → SQL / DataFrame** (`Scan` node: `number of files read` vs `files pruned`).
-* **Ingestion pattern:** Scheduled `MAX(ingest_ts)` batching avoids streaming overhead, but breaks on out-of-order exports and full-table DQC scans (see *The daily job*), where immutable raw files and file-based tracking must replace it.
+* **Liquid Clustering:** Chose `CLUSTER BY (report_date, country, platform)` in Gold (`CLUSTER BY` on date/lookup keys in Silver) to avoid tiny files from 3-column partitioning while keeping multi-column data skipping—trading weaker single-date rewrite isolation than `PARTITIONED BY`. Verify in **Spark UI → SQL / DataFrame** (`Scan` node: `number of files read` vs `files pruned`).
+* **Ingestion pattern:** Scheduled `MAX(ingest_ts)` batching avoids streaming overhead, but breaks on out-of-order exports and full-table DQC scans (see *The daily job*), where immutable raw files and file-based tracking must replace it. More details in the previous in depth question
 * **Unity Catalog:** This part is not covered by the tech assignment
 
 ## How I Worked with AI
