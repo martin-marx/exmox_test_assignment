@@ -1,47 +1,113 @@
-# Rewarded-Offer Daily KPIs
+# Solution Write-Up
 
-## Environment and Runbook
+## Environment, How to Run & Verify
 
-The code targets Databricks Free Edition serverless compute with the `test_assignment_marx` catalog. It has not been run in a personal Databricks workspace; the reference results below were independently recomputed from the supplied CSVs. A production workspace would use separate environment catalogs and service-principal grants.
+* **Environment:** Databricks Free Edition (Serverless compute + Unity Catalog). Free Edition covers serverless notebooks, Workflows, and UC Volumes out of the box, while constraining custom cluster tuning and always-on streaming—which aligns naturally with a scheduled batch architecture.
+* **Setup & Run:**
+  1. Execute the DDL setup script against a UC-enabled SQL Warehouse to create the `test_assignment_marx` catalog, schemas (`bronze`, `silver`, `gold`, `data`), and volume `raw_data`, then upload the four CSVs into `/Volumes/test_assignment_marx/data/raw_data/`.
+  2. Deploy and trigger the workflow via Databricks CLI:
+     ```bash
+     databricks bundle deploy
+     databricks bundle run <job_name>
+     ```
+  3. Run unit tests locally:
+     ```bash
+     pytest
+     ```
+* **Verification:**
+  * Confirm all DQC tasks pass without raising `ValueError`.
+  * Query Gold and reconcile `installs` / `reward_payouts` totals against `silver.installs` and `silver.fact_events`:
+    ```sql
+    SELECT * FROM test_assignment_marx.gold.daily_kpis
+    ORDER BY report_date DESC, country, platform
+    LIMIT 10;
+    ```
+  *(Note: Paste 3–5 rows of your actual `gold.daily_kpis` query output here before packaging the submission.)*
 
-1. Authenticate the Databricks CLI and set `DATABRICKS_HOST`, `DATABRICKS_TOKEN`, and `DATABRICKS_WAREHOUSE_ID`.
-2. Ensure the supplied `data/` CSVs are present, then run `scripts/setup.sh`. It applies `sql/ddl.sql` and uploads each static source file to the Unity Catalog Volume.
-3. Run `databricks bundle deploy`, then trigger `rewarded-offer-kpis` with `target_date=2026-05-30,lookback_days=62` for the supplied initial load. The bundled schedule is paused by default and is `00:15 UTC` once enabled; scheduled target dates resolve to the previous UTC calendar date through Databricks Jobs date arithmetic. This requires the workspace preview **Math in Parameters – Expression support in job parameters**.
-4. Run `uv sync --all-groups`, `uv run ruff format --check .`, `uv run ruff check .`, and `uv run pytest` locally.
+---
 
-The Workflow fans out by source: each Bronze table runs independently, then its table-specific DQC starts immediately. Each Silver transformation waits for its DQC. A Delta `CHECK` constraint blocks a negative payout when Silver offers are written. Gold waits only for Silver installs, events, and offers; its DQC also waits for the profile SCD2 branch to complete before auditing profile gaps. Gold always rebuilds only the explicit `target_date` and `lookback_days` window. `lookback_days=0` restates one day.
+## 1. Three-Layer Architecture (Bronze, Silver, Gold)
 
-## Layers and Re-runs
+* **Bronze:** Stores raw snapshots loaded directly from source files (all columns as `STRING` to preserve raw payloads).
+* **Silver:** Cleaned, typed, and deduplicated tables built from Bronze:
+  * **`fact_events`:** Incrementally loaded using `ingest_ts`. Designed for high-volume event streams where source retries/duplicates are expected, while conflicting payloads for the same `event_id` are treated as data quality errors.
+  * **`installs`:** Overwritten from the latest snapshot and deduplicated by `user_id` to keep the dimension simple.
+  * **`offers`:** Deduplicated overwrite clustered on offer_id. Cost: No historical attribute changes are tracked.
+  * **`user_profile`:** Implemented as SCD Type 2 over the 30-day backend profile snapshot, used downstream for DQC reconciliation against telemetry.
+* **Gold (`daily_kpis`):** Recomputes the last 7 days (`lookback_days = 7`) on each run to absorb late-arriving events—chosen because 7 days covers the maximum lag between `event_ts` and `ingest_ts` observed in the dataset.
 
-Bronze stores the current raw snapshot: one parameterized notebook receives a source name, target table, and source-column contract from the Workflow, then overwrites that raw table. All CSV values remain strings. Re-running the same static inputs leaves Bronze unchanged; full-snapshot DQCs, watermark-filtered Silver event inserts, immutable install/offer inserts, profile SCD2, and Gold window replacement keep the pipeline idempotent. A production feed would use append-only immutable files with file tracking or a source version/checksum.
+---
 
-Silver owns business interpretation: country normalization, typed fields, earliest-`ingest_ts` event deduplication, immutable installs/offers, and user-profile SCD2. Events are incrementally selected from Bronze at or beyond `MAX(silver.fact_events.ingest_ts)` and reprocess the boundary safely. This assumes `ingest_ts` is a reliable source high watermark. Gold remains controlled only by `target_date` and `lookback_days`, and joins offers on `offer_id`; user profiles remain audit-only. Rows without usable keys or timestamps stay available in Bronze but are excluded from typed Silver metrics; the DQC reports their counts. Installs and offers must have one immutable definition per business key: duplicate or changed existing definitions block their Silver branches. Profiles version only when their tracked values change.
+## 2. Making the Pipeline Re-Runnable (Idempotency & Trade-offs)
 
-Gold has `(report_date, country, platform)` grain. It full-outer-joins daily installs with event metrics so install-only combinations remain visible. The bounded overwrite is idempotent. Distinct-user counts are non-additive, so the restatement window is recalculated rather than incrementally summed.
+* **Bronze:** Full overwrite on every run.
+  * *Cost:* No raw historical snapshots are retained beyond Delta Time Travel.
+* **Silver:**
+  * **`fact_events`:** Upserted (`MERGE`) by `event_id` (using date/key clustering to bound merge scans), filtering out rows with `ingest_ts` older than the current watermark while allowing `event_ts` updates. *Cost:* Out-of-order rows with older `ingest_ts` are skipped.
+  * **`installs`:** Deduplicated overwrite clustered on `install_date`. *Cost:* No historical attribute changes are tracked.
+  * **`offers`:** Deduplicated overwrite clustered on offer_id. Cost: No historical attribute changes are tracked.
+  * **`user_profile`:** SCD Type 2 (`valid_from`, `valid_to`, `is_current`) tracks full attribute change history over time.
+* **Gold (`daily_kpis`):** Atomically replaces only the last 7 days via `replaceWhere` instead of reprocessing the full table, ensuring idempotent recalculation of non-additive `COUNT(DISTINCT user_id)` metrics as late events arrive.
+  * *Cost:* Recomputes full days across the 7-day window on every run rather than updating individual rows.
 
-## Data Findings
+---
 
-- 435,907 raw events reduce to 423,186 unique `event_id`s, so Silver keeps the earliest `ingest_ts` version.
-- 13,270 unique non-payment events use offers missing from the offer file. Gold preserves them with a left join. All 9,860 reward payments are priced; `unpriced_reward_payouts` is therefore zero for this data, but remains a soft audit metric for future data.
-- Event ingestion lag peaks at 133.9 hours, with 2.51% arriving after 24 hours. The seven-day default exceeds the observed tail but must be monitored and adjusted from lag percentiles.
-- 1,590 country values need trimming and uppercasing. Organic campaign IDs are valid NULLs and remain NULL.
-- 3,003 events predate their installation timestamp. They are retained because client clock skew and non-linear funnels are plausible mobile telemetry behavior.
-- 2,305 profiles report lifetime events but have no event telemetry. Profiles are retained for audit only and excluded from KPI calculations.
+## 3. Deciding What Is Trustworthy (Data Quality Strategy)
 
-Expected full-load result: 997 Gold rows, 40,000 installs, 9,860 payouts, EUR 26,547.41 reward cost, and zero unpriced payouts. The `2026-05-15 / DE / android` slice is 77 installs, 323 app opens, 194 views, 137 starts, 55 goals, 15 paying users, 15 payouts, and EUR 33.32 cost. A live workspace execution remains required before submission.
+Each Bronze table runs a dedicated DQC task before loading Silver, followed by a final DQC task after Gold and `user_profile` complete.
 
-## Quality Controls
+**Blocking checks (raise `ValueError` and halt downstream tasks):**
+* **Duplicate business keys** in reference/entity snapshots (`installs`, `offers`, `user_profile`) — prevents ambiguous joins and fan-out.
+* **Mutations of immutable records** (conflicting payloads or attributes for an existing `event_id`, `user_id` in `installs`, or `offer_id`) — stops silent corruption of historical facts.
+* **Negative `payout_eur` values** — invalid financial amounts are blocked in DQC and enforced at the storage layer via `CHECK (payout_eur >= 0)`.
+* **Orphan payouts** (`reward_paid` events referencing an `offer_id` missing from `silver.offers`) — enforced in post-Gold DQC to prevent unpriced payouts.
 
-Runtime DQCs validate incoming data rather than re-testing transformation logic. Blank required identifiers, unparseable timestamps, unknown event names, raw duplicates, malformed offer values, unpriced payouts, and profile telemetry gaps are non-blocking audits. Bronze preserves every source row for investigation. Duplicate or changed immutable offer/install definitions block their Silver branches, and duplicate profile IDs block profile processing. Malformed payouts are excluded from Silver and surface as unpriced payouts; a Delta `CHECK (payout_eur >= 0)` blocks negative numeric payouts. PySpark unit tests cover ingestion, normalization, deduplication, missing-offer preservation, and full-outer aggregation.
+**Non-blocking audits (log `DATA_QUALITY_ALERT` and continue):**
+* **Blank required identifiers & unparseable timestamps:** Retained as-is in Bronze for auditability, dropped before loading Silver.
+* **Raw duplicate `event_id`s (identical payload):** Kept in Bronze; collapsed in Silver by keeping the earliest `ingest_ts`.
+* **Unknown `event_name` values:** Kept as-is in Silver so unexpected event types are not silently lost, while logging an alert.
+* **Events arriving beyond `lookback_days`:** Logged so late tails outside the 7-day Gold window are visible.
+* **Cross-source reconciliation gaps:** Profiles in `silver.user_profile` reporting `events_lifetime > 0` with no matching telemetry in `silver.fact_events` are flagged without breaking the pipeline.
 
-## Deeper Considerations
+---
 
-Filtering a nightly job only by yesterday's `event_ts` loses late events; assigning late arrivals to their ingest date corrupts daily trends. The implementation restates a bounded trailing window, and its events DQC logs rows arriving beyond that window. This is a bounded correction policy, not a guarantee to repair arbitrarily old arrivals; production would route affected event dates from incremental ingestion state.
+## 4. Tests
 
-Liquid clustering avoids tiny date partitions for this small data volume. At scale, validate it with query-profile pruning metrics and change keys to follow access patterns. Unity Catalog should centrally govern catalogs, ownership, grants, and shared dimensions; that adds change control but prevents metric drift.
+* **Thin notebooks, testable modules:** Notebooks only handle high-level DataFrame orchestration; all transformation logic lives in util PySpark functions.
+* **Unit tests:** Cover core transformation scenarios—aggregations, join behaviors (including `full` and `left` joins), deduplication, and edge cases—and fail on breaking logic changes.
+* **Storage constraint:** Enforced `CHECK (payout_eur >= 0)` directly in DDL on `silver.offers` as a database-level guardrail.
 
-Silent failures include inner joins dropping install-only rows or missing-offer events, an accidental `RELY` constraint allowing unsafe optimizer assumptions, and overwriting prices in place. For many continuous sources, replace file scans with Auto Loader checkpoints and schema rescue, serialize Silver merges, and consider HLL sketches only when exact distinct counts become prohibitively expensive.
+---
 
-## AI Usage
+## The Deeper Questions
 
-OpenCode was used to profile the supplied CSVs, review an initial architecture proposal, and implement this repository. A proposal claiming 299 unpriced reward payments was rejected after direct profiling showed zero; the code keeps the metric as an audit field instead. The proposed append-only Bronze design was rejected because static source paths could not make it idempotent without additional file-tracking machinery; Bronze therefore uses current raw snapshots. Offers use immutable IDs because no business-effective timestamp is supplied, while profile SCD2 is retained because its values are explicitly mutable snapshot aggregates. No parallel agents or prior-session context were used.
+### The daily job
+
+**What gets wrong:**
+Filtering Silver by `MAX(ingest_ts)` over a single overwritten raw file silently drops rows whenever clock skew or delayed exports produce older `ingest_ts` values. Overwriting one unpartitioned file also wipes raw batch history and forces full-table DQC scans on every run.
+
+**How to find out:**
+In the current setup, you don't—skipped rows vanish silently until downstream users report missing numbers.
+
+**What to build instead:**
+* **Partitioned raw history + file tracking:** Keep raw history instead of overwriting a single file—store immutable incoming files partitioned by landing date (or append updated dumps with our own landing timestamp), and track processed files (via a manifest or Auto Loader) rather than relying on payload `ingest_ts`.
+* **Batch-scoped DQC:** Run stateless checks on new files only so old alerts don't re-fire, while keeping global `event_id` deduplication against Silver.
+* **Recalculate only changed dates in Gold:** Extract the distinct `event_date`s touched by the new batch and recompute only those full days via `replaceWhere`—capturing the 2.51% of events arriving >24h late (tail up to 133.9h) without blindly recalculating a fixed date range every night.
+
+### Your platform choices
+
+* **Gold `replaceWhere`:** In Gold, full-day atomic `replaceWhere` keeps non-additive `COUNT(DISTINCT user_id)` exact and SQL stateless (since a mixed `(report_date, country, platform)` row cannot be updated by simply merging additive deltas like `installs` or `reward_payouts`), trading higher compute against file-routed partial rewrites or approximate HyperLogLog sketches.
+* **Liquid Clustering:** Chose `CLUSTER BY (report_date, country, platform)` in Gold (`CLUSTER BY` on date/lookup keys in Silver) to avoid tiny files from 3-column partitioning while keeping multi-column data skipping—trading weaker single-date rewrite isolation than `PARTITIONED BY (report_date)` + `ZORDER`. Verify in **Spark UI → SQL / DataFrame** (`Scan` node: `number of files read` vs `files pruned`).
+* **Ingestion pattern:** Scheduled `MAX(ingest_ts)` batching avoids streaming overhead, but breaks on out-of-order exports and full-table DQC scans (see *The daily job*), where immutable raw files and file-based tracking must replace it.
+* **Unity Catalog:** This part is not covered by the tech assignment
+
+## How I Worked with AI
+
+* **Workflow & tool split:** Used Opencode (Terra 5.6) to scaffold the initial project and DABs structure, Claude Haiku 5.5 for targeted code and unit-test refinements, and Gemini to stress-test edge cases and tighten the write-up.
+* **Context across sessions:** Instead of relying on long chat histories, I carried context between tools through concrete artifacts—the SQL DDL, pure PySpark transformation modules, and incremental drafts of `SOLUTION.md`.
+* **What I kept:** Boilerplate scaffolding, parameterized pytest cases, and structured trade-off framing for non-additive metrics and ingestion failure modes.
+* **What I rejected:** Repeatedly stripped out over-engineered suggestions and hallucinations—including invalid `PARTITION BY` + `CLUSTER BY` combinations, unimplemented Change Data Feed (CDF) tracking, enterprise Unity Catalog RBAC policies not built in this prototype, and volume-drop alerts that would not catch timestamp skew.
+
+### Result
+![img.png](img.png)
+![img_1.png](img_1.png)
