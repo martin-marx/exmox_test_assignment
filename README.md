@@ -4,14 +4,13 @@ Databricks batch pipeline for daily rewarded-offer KPIs by reporting date, count
 
 ## Prerequisites
 
-- Python 3.11+
-- [uv](https://docs.astral.sh/uv/)
-- Databricks CLI (tested with v1.27) authenticated to a Unity Catalog-enabled workspace
-- `jq`, used by `scripts/setup.sh`
-- Permission to create a catalog. `setup.sh` runs `CREATE CATALOG IF NOT EXISTS test_assignment_marx`; a workspace admin can create it beforehand instead.
-- A running SQL warehouse ID for the one-time schema setup
-- JDK 17 for the local Spark tests only (`uv run pytest`). Spark 3.5 supports Java 8, 11, and 17.
-- The four source CSVs (`installs`, `events`, `offers`, `user_profile`) in `data/`. They are committed to the repository, so a clone already has them.
+* Python 3.11–3.13 (managed via [uv](https://docs.astral.sh/uv/))
+* Databricks CLI (tested with v1.27) authenticated to a Unity Catalog-enabled workspace
+* `jq` (used by `scripts/setup.sh`)
+* Permission to create catalogs in the workspace (or a pre-created catalog named `test_assignment_marx`)
+* A running SQL warehouse ID for the one-time schema setup
+* **JDK 17** (required for local PySpark unit tests only)
+* The four source CSVs (`installs`, `events`, `offers`, `user_profile`) in `data/` (already committed to the repository).
 
 ## Local Checks
 
@@ -24,7 +23,7 @@ uv run pytest
 
 ## First Workspace Run
 
-Authenticate the Databricks CLI, then find and export the SQL warehouse used for the DDL. Run these from the repository root, because the scripts use relative paths:
+Authenticate the Databricks CLI, then find and export the SQL warehouse used for the DDL. Run these from the repository root:
 
 ```bash
 databricks auth login --host https://<workspace-host>
@@ -37,8 +36,7 @@ Create the Unity Catalog objects and upload the supplied static source files:
 ```bash
 ./scripts/setup.sh
 ```
-
-This creates the catalog `test_assignment_marx`, the schemas `bronze`, `silver`, `gold`, and `data`, the volume `data.raw_data`, and all tables, then uploads the CSVs to `/Volumes/test_assignment_marx/data/raw_data/`. It is re-runnable: the offers constraint is dropped and re-added on each run. `CREATE TABLE IF NOT EXISTS` never alters an existing table, so after a schema change you must drop the affected schemas or tables manually before re-running.
+*Note: This script creates the catalog `test_assignment_marx`, the schemas (`bronze`, `silver`, `gold`, `data`), the volume `data.raw_data`, and all tables, then uploads the CSVs to `/Volumes/test_assignment_marx/data/raw_data/`. It is re-runnable.*
 
 Deploy and run the Workflow:
 
@@ -49,37 +47,31 @@ databricks bundle run rewarded_offer_kpis --target dev \
   --params target_date=2026-05-30,lookback_days=62
 ```
 
-The initial supplied-data load uses `2026-05-30` and `62` days to cover the complete date range. Compare the resulting Gold table with the expected values in `SOLUTION.md`.
+The initial data load uses `2026-05-30` and `62` days to cover the complete supplied date range.
 
-Scheduled runs resolve `target_date` to the previous UTC calendar date using Databricks Jobs date arithmetic. This requires the workspace preview **Math in Parameters – Expression support in job parameters**. Every run rebuilds the inclusive window ending on `target_date`. To rebuild one reporting date manually:
+Scheduled runs resolve `target_date` to the previous UTC calendar date automatically. To restate a single historical reporting date manually:
 
 ```bash
 databricks bundle run rewarded_offer_kpis --target dev \
   --params target_date=2026-05-15,lookback_days=0
 ```
 
-## Pipeline Layout
+## Repository Structure
 
 ```text
-src/
-  bronze/
-    sources/  # One parameterized raw-snapshot ingestion notebook
-    dqc/      # Source-data audits
-  silver/
-    tables/   # Typed per-table transformations
-  gold/
-    tables/   # Daily KPI aggregation
-    dqc/      # Published KPI audits
-tests/
-  bronze/
-  silver/
-  gold/
+.
+├── scripts/
+│   └── setup.sh              # Bootstraps Unity Catalog and uploads CSVs
+├── sql/
+│   ├── ddl.sql               # Declarative schema and table definitions
+│   └── grants.sql            # Reference RBAC policies
+├── src/
+│   ├── bronze/               # Raw string ingestion and Data Quality Checks (DQC)
+│   ├── silver/               # Cleansing, deduplication, and SCD models
+│   └── gold/                 # Parameterized window aggregations
+├── tests/                    # Pytest suite for pure transformation logic
+├── SOLUTION.md               # Architecture decisions, data findings, and KPI results
+└── CLAUDE.md                 # Technical guide and constraints for Claude Code
 ```
 
-Bronze overwrites each static raw snapshot as strings. Re-running the same input leaves Bronze unchanged; Silver event inserts, immutable install/offer inserts, profile SCD2, and Gold window replacement keep the pipeline idempotent. The events DQC validates the full current Bronze snapshot against Silver history before Silver filters its new `ingest_ts` batch. Offers and installs must contain one immutable definition per business key, so duplicate IDs or changed existing definitions block their Silver branches. User profiles must have one row per user in the source; changed profiles atomically expire the current Silver version and insert a replacement. Silver cleans and types data; unusable keyed or dated rows remain available in Bronze and produce non-blocking DQC alerts. A Delta `CHECK` constraint blocks negative payouts when `silver.offers` is written. Gold depends only on Silver installs, events, and offers.
-
-Silver events uses `MAX(silver.fact_events.ingest_ts)` as its source-arrival watermark. It reprocesses the watermark boundary, deduplicates it by `event_id`, and inserts only unseen event IDs. Gold remains strictly controlled by its `target_date` and `lookback_days` window. This assumes `ingest_ts` is a reliable source high watermark.
-
-Each Silver branch waits for its Bronze DQC. Unknown event names are retained for audit but do not contribute to a named Gold event metric.
-
-See `SOLUTION.md` for data findings, layer decisions, and reference output values.
+Please refer to **`SOLUTION.md`** for a complete breakdown of data findings, architectural trade-offs, and the reference output values.
