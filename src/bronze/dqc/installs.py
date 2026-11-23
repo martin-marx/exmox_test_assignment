@@ -15,13 +15,9 @@ invalid = installs.filter(
     | (F.trim("user_id") == "")
     | F.try_to_timestamp("install_ts").isNull()
 ).count()
+if invalid:
+    logger.warning("DATA_QUALITY_ALERT invalid_installs=%s", invalid)
 duplicate_users = installs.count() - installs.select("user_id").distinct().count()
-if invalid or duplicate_users:
-    logger.warning(
-        "DATA_QUALITY_ALERT invalid_installs=%s duplicate_user_rows=%s",
-        invalid,
-        duplicate_users,
-    )
 if duplicate_users:
     raise ValueError(
         f"Installs source must contain one row per user_id: {duplicate_users} duplicates"

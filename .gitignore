@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Databricks CLI local state
+.databricks/
+
+# IDE and OS metadata
+.idea/
+.DS_Store
