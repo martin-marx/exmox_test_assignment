@@ -1,6 +1,8 @@
 from datetime import date, datetime
 from decimal import Decimal
 
+import pytest
+
 from gold.tables.utils import aggregate_events, aggregate_installs, combine_daily_kpis
 
 
@@ -71,3 +73,62 @@ def test_combine_daily_kpis_preserves_install_only_rows_and_coalesces_metrics(sp
     assert actual.dau_app_open == 0
     assert actual.reward_payouts == 0
     assert actual.reward_cost_eur == Decimal("0.00")
+
+
+EVENT_COLUMNS = (
+    "user_id string, offer_id string, event_name string, event_ts timestamp, event_date date"
+)
+INSTALL_COLUMNS = "user_id string, country string, platform string"
+OFFER_COLUMNS = "offer_id string, payout_eur decimal(10,2)"
+
+
+@pytest.mark.parametrize(
+    ("event_name", "metric"),
+    [
+        ("offer_view", "dau_offer_view"),
+        ("offer_start", "dau_offer_start"),
+        ("goal_reached", "dau_goal_reached"),
+    ],
+)
+def test_aggregate_events_counts_distinct_users_per_event_name(spark, event_name, metric):
+    installs = spark.createDataFrame([("u-1", "DE", "android")], INSTALL_COLUMNS)
+    events = spark.createDataFrame(
+        [("u-1", "of-1", event_name, datetime(2026, 5, 10, 9), date(2026, 5, 10))],
+        EVENT_COLUMNS,
+    )
+    offers = spark.createDataFrame([("of-1", Decimal("1.50"))], OFFER_COLUMNS)
+
+    actual = aggregate_events(
+        events, installs, offers, date(2026, 5, 10), date(2026, 5, 10)
+    ).first()
+
+    assert getattr(actual, metric) == 1
+
+
+def test_aggregate_events_excludes_events_outside_the_reporting_window(spark):
+    installs = spark.createDataFrame([("u-1", "DE", "android")], INSTALL_COLUMNS)
+    events = spark.createDataFrame(
+        [("u-1", "of-1", "app_open", datetime(2026, 5, 9, 9), date(2026, 5, 9))],
+        EVENT_COLUMNS,
+    )
+    offers = spark.createDataFrame([("of-1", Decimal("1.50"))], OFFER_COLUMNS)
+
+    actual = aggregate_events(events, installs, offers, date(2026, 5, 10), date(2026, 5, 10))
+
+    assert actual.count() == 0
+
+
+def test_aggregate_events_keeps_events_from_users_without_an_install(spark):
+    installs = spark.createDataFrame([], INSTALL_COLUMNS)
+    events = spark.createDataFrame(
+        [("u-9", "of-1", "app_open", datetime(2026, 5, 10, 9), date(2026, 5, 10))],
+        EVENT_COLUMNS,
+    )
+    offers = spark.createDataFrame([("of-1", Decimal("1.50"))], OFFER_COLUMNS)
+
+    actual = aggregate_events(
+        events, installs, offers, date(2026, 5, 10), date(2026, 5, 10)
+    ).first()
+
+    assert actual.country is None
+    assert actual.dau_app_open == 1
