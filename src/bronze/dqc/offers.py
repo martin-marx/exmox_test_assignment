@@ -15,11 +15,12 @@ offers = spark.table(f"{catalog}.bronze.offers").withColumn(
 malformed = offers.filter(
     F.col("offer_id").isNull() | (F.trim("offer_id") == "") | F.col("parsed_payout_eur").isNull()
 ).count()
+if malformed:
+    logger.warning("DATA_QUALITY_ALERT malformed_offers=%s", malformed)
+
 negative = offers.filter(F.col("parsed_payout_eur") < 0).count()
-if malformed or negative:
-    logger.warning(
-        "DATA_QUALITY_ALERT malformed_offers=%s negative_payouts=%s", malformed, negative
-    )
+if negative:
+    raise ValueError(f"Offers source contains negative payouts: {negative}")
 
 duplicate_offer_rows = offers.count() - offers.select("offer_id").distinct().count()
 if duplicate_offer_rows:
