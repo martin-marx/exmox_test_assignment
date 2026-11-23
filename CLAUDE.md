@@ -49,6 +49,4 @@ This is a Databricks Asset Bundle with one Workflow (`resources/workflow.yml`) i
 
 **Gold** (`gold/tables/daily_kpis.py`) rebuilds the window `[target_date − lookback_days, target_date]` in `gold.daily_kpis` with `replaceWhere`. It computes installs and event metrics separately, then full-outer-joins them on `(report_date, country, platform)` so install-only combinations survive. Event country and platform come from the user's install (a join on `user_id`), not from the event itself. Events with an offer missing from `silver.offers` are kept with a left join, so they count toward events but not toward cost. Distinct-user counts are non-additive, so the window is recomputed rather than summed. `gold/dqc/daily_kpis.py` is also non-blocking.
 
-**Dead code.** `src/silver/tables/utils.py::merge_all` is never called, and it refers to an undefined `spark`. Do not reuse it without fixing it. The silver notebooks perform their own merges.
-
 **Re-runs.** Each Silver step is designed to be idempotent: Bronze overwrites, Silver is append-only or merges on keys, and Gold rewrites a bounded window. If you change an incremental rule, check the reprocessing behaviour, not just the happy path.

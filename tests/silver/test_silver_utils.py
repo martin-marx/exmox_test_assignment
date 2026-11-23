@@ -5,7 +5,6 @@ from pyspark.sql.window import Window
 
 from silver.tables.utils import (
     from_ingest_watermark,
-    merge_column_mappings,
     normalize_country,
 )
 
@@ -14,13 +13,6 @@ def test_normalize_country_removes_split_aggregation_values(spark):
     rows = spark.createDataFrame([("de ",), ("US",), (None,)], ["country"])
     normalized = rows.select(normalize_country(F.col("country")).alias("country")).collect()
     assert [row.country for row in normalized] == ["DE", "US", None]
-
-
-def test_merge_column_mappings_preserve_the_source_column_names():
-    assert merge_column_mappings(["user_id", "country"]) == {
-        "user_id": "source.user_id",
-        "country": "source.country",
-    }
 
 
 def test_event_deduplication_keeps_earliest_ingest_not_first_input_row(spark):
